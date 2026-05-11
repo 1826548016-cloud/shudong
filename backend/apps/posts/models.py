@@ -4,15 +4,11 @@ class Post(models.Model):
     MEDIA_TYPE_NONE = "none"
     MEDIA_TYPE_IMAGE = "image"
     MEDIA_TYPE_VIDEO = "video"
-    MEDIA_TYPE_AUDIO = "audio"
-    MEDIA_TYPE_FILE = "file"
 
     MEDIA_TYPE_CHOICES = (
         (MEDIA_TYPE_NONE, "None"),
         (MEDIA_TYPE_IMAGE, "Image"),
         (MEDIA_TYPE_VIDEO, "Video"),
-        (MEDIA_TYPE_AUDIO, "Audio"),
-        (MEDIA_TYPE_FILE, "File"),
     )
 
     content = models.TextField(blank=True)
@@ -27,18 +23,6 @@ class Post(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-
-
-class PostMedia(models.Model):
-    post = models.ForeignKey(Post, related_name="media_items", on_delete=models.CASCADE)
-    file = models.FileField(upload_to="posts/")
-    media_type = models.CharField(
-        max_length=10, choices=Post.MEDIA_TYPE_CHOICES, default=Post.MEDIA_TYPE_FILE
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["created_at"]
 
 
 class Comment(models.Model):

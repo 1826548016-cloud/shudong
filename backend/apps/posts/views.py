@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from .models import Comment, Like, Post, PostMedia, SiteProfile
+from .models import Comment, Like, Post, SiteProfile
 from .serializers import (
     CommentAdminSerializer,
     CommentReplySerializer,
@@ -48,69 +48,25 @@ class PostViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         return {"request": self.request}
 
-    def _infer_media_type(self, file_obj):
+    def _infer_media_type(self, file_obj, current: str):
+        if file_obj is None or current and current != Post.MEDIA_TYPE_NONE:
+            return current
         content_type = getattr(file_obj, "content_type", "") or ""
         if content_type.startswith("image/"):
             return Post.MEDIA_TYPE_IMAGE
         if content_type.startswith("video/"):
             return Post.MEDIA_TYPE_VIDEO
-        if content_type.startswith("audio/"):
-            return Post.MEDIA_TYPE_AUDIO
-        name = getattr(file_obj, "name", "") or ""
-        ext = name.split(".")[-1].lower() if "." in name else ""
-        if ext in {"mp3", "wav", "m4a", "aac", "ogg", "webm"}:
-            return Post.MEDIA_TYPE_AUDIO
-        if ext in {"mp4", "mov", "webm", "mkv"}:
-            return Post.MEDIA_TYPE_VIDEO
-        if ext in {"png", "jpg", "jpeg", "gif", "webp"}:
-            return Post.MEDIA_TYPE_IMAGE
-        return Post.MEDIA_TYPE_FILE
+        return Post.MEDIA_TYPE_NONE
 
-    def _save_media_items(self, post: Post, files):
-        for f in files:
-            PostMedia.objects.create(
-                post=post, file=f, media_type=self._infer_media_type(f)
-            )
+    def perform_create(self, serializer):
+        media = serializer.validated_data.get("media")
+        media_type = serializer.validated_data.get("media_type") or Post.MEDIA_TYPE_NONE
+        serializer.save(media_type=self._infer_media_type(media, media_type))
 
-        first = post.media_items.first()
-        if first:
-            post.media_type = first.media_type
-            post.save(update_fields=["media_type"])
-
-    def create(self, request, *args, **kwargs):
-        content = (request.data.get("content") or "").strip()
-        files = request.FILES.getlist("media")
-        if not content and not files:
-            return Response({"detail": "empty"}, status=status.HTTP_400_BAD_REQUEST)
-
-        post = Post.objects.create(content=content, media_type=Post.MEDIA_TYPE_NONE)
-        self._save_media_items(post, files)
-        serializer = PostSerializer(post, context=self.get_serializer_context())
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    def partial_update(self, request, *args, **kwargs):
-        post = self.get_object()
-        if "content" in request.data:
-            post.content = (request.data.get("content") or "").strip()
-            post.save(update_fields=["content"])
-
-        replace_media = str(request.data.get("replace_media") or "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        files = request.FILES.getlist("media")
-        if replace_media:
-            post.media_items.all().delete()
-            post.media = None
-            post.media_type = Post.MEDIA_TYPE_NONE
-            post.save(update_fields=["media", "media_type"])
-
-        if files:
-            self._save_media_items(post, files)
-
-        serializer = PostSerializer(post, context=self.get_serializer_context())
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def perform_update(self, serializer):
+        media = serializer.validated_data.get("media")
+        media_type = serializer.validated_data.get("media_type") or Post.MEDIA_TYPE_NONE
+        serializer.save(media_type=self._infer_media_type(media, media_type))
 
     @action(detail=True, methods=["post"], permission_classes=(permissions.AllowAny,))
     def view(self, request, pk=None):
