@@ -20,6 +20,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
+from django.views.static import serve
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
@@ -32,6 +33,16 @@ urlpatterns = [
     path("api/", include("apps.posts.urls")),
     path("api/auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+]
+
+if settings.DEBUG:
+    frontend_dist = settings.BASE_DIR.parent / "frontend" / "dist"
+    urlpatterns += [
+        path("assets/<path:path>", serve, kwargs={"document_root": frontend_dist / "assets"}),
+    ]
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+urlpatterns += [
     path("", FrontendAppView.as_view(), name="frontend"),
     re_path(
         r"^(?!api/|admin/|media/|assets/).*$",
@@ -39,10 +50,3 @@ urlpatterns = [
         name="frontend-spa",
     ),
 ]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    urlpatterns += static(
-        "/assets/",
-        document_root=settings.BASE_DIR.parent / "frontend" / "dist" / "assets",
-    )

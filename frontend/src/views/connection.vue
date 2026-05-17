@@ -1,54 +1,62 @@
 <template>
-  <div class="contact-container">
-    <div class="contact-card">
-      <div class="contact-title">
-        <h2>联系我</h2>
-        <p>欢迎交流、来访留言</p>
+  <div class="page">
+    <div class="bg-overlay"></div>
+
+    <div class="content">
+      <div class="contact-header">
+        <button class="back-link" type="button" @click="goBack">← 返回主页</button>
+        <div class="contact-title">
+          <h2>联系我</h2>
+          <p>欢迎交流、来访留言</p>
+        </div>
       </div>
 
-      <div class="contact-list">
-        <div class="contact-item" :class="{ disabled: !wechatId }" @click="copyWechat">
-          <div class="icon wechat-icon">微</div>
-          <div class="info">
-            <div class="name">微信</div>
-            <div class="desc">
-              <span v-if="wechatId">点击复制：{{ wechatId }}</span>
-              <span v-else>未设置</span>
+      <div class="contact-card">
+        <div class="contact-list">
+          <div class="contact-item" :class="{ disabled: !wechatId }" @click="copyWechat">
+            <div class="icon wechat-icon">微</div>
+            <div class="info">
+              <div class="name">微信</div>
+              <div class="desc">
+                <span v-if="wechatId">点击复制：{{ wechatId }}</span>
+                <span v-else>未设置</span>
+              </div>
             </div>
+            <div class="arrow">→</div>
           </div>
-          <div class="arrow">→</div>
-        </div>
 
-        <div class="contact-item" :class="{ disabled: !douyinUrl }" @click="openDouyin">
-          <div class="icon douyin-icon">抖</div>
-          <div class="info">
-            <div class="name">抖音</div>
-            <div class="desc">
-              <span v-if="douyinUrl">打开主页</span>
-              <span v-else>未设置</span>
+          <div class="contact-item" :class="{ disabled: !douyinUrl }" @click="openDouyin">
+            <div class="icon douyin-icon">抖</div>
+            <div class="info">
+              <div class="name">抖音</div>
+              <div class="desc">
+                <span v-if="douyinUrl">点击复制：{{ douyinUrl }}</span>
+                <span v-else>未设置</span>
+              </div>
             </div>
+            <div class="arrow">→</div>
           </div>
-          <div class="arrow">→</div>
-        </div>
 
-        <div class="contact-item" :class="{ disabled: !emailid}" @click="openDouyin">
-          <div class="icon douyin-icon">邮</div>
-          <div class="info">
-            <div class="name">邮箱</div>
-            <div class="desc">
-              <span v-if="emailid">点击复制：{{ emailid }}</span>
-              <span v-else>未设置</span>
+          <div class="contact-item" :class="{ disabled: !emailid }" @click="copyEmail">
+            <div class="icon email-icon">邮</div>
+            <div class="info">
+              <div class="name">邮箱</div>
+              <div class="desc">
+                <span v-if="emailid">点击复制：{{ emailid }}</span>
+                <span v-else>未设置</span>
+              </div>
             </div>
+            <div class="arrow">→</div>
           </div>
-          <div class="arrow">→</div>
-        </div>
-        <div v-if="isAuthed && phoneNum" class="contact-item" @click="callPhone">
-          <div class="icon phone-icon">电</div>
-          <div class="info">
-            <div class="name">电话</div>
-            <div class="desc">私密联系：{{ phoneNum }}</div>
+
+          <div v-if="isAuthed && phoneNum" class="contact-item" @click="callPhone">
+            <div class="icon phone-icon">电</div>
+            <div class="info">
+              <div class="name">电话</div>
+              <div class="desc">私密联系：{{ phoneNum }}</div>
+            </div>
+            <div class="arrow">→</div>
           </div>
-          <div class="arrow">→</div>
         </div>
       </div>
     </div>
@@ -57,24 +65,33 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { fetchProfileAdmin, fetchProfilePublic } from '../api/profile'
 
+const router = useRouter()
 const isAuthed = computed(() => Boolean(localStorage.getItem('treehole_token')))
 
-const wechatId = ref('Y18836286216')
+const wechatId = ref('')
 const douyinUrl = ref('')
 const phoneNum = ref('')
 const emailid = ref('')
+
+function goBack() {
+  router.push('/')
+}
+
 async function load() {
   try {
     const data = await fetchProfilePublic()
     wechatId.value = (data.wechat_id ?? '').trim()
     douyinUrl.value = (data.douyin_url ?? '').trim()
+    emailid.value = (data.email ?? '').trim()
   } catch (e) {
     wechatId.value = ''
     douyinUrl.value = ''
+    emailid.value = ''
   }
 
   if (!isAuthed.value) {
@@ -120,9 +137,23 @@ async function copyWechat() {
   }
 }
 
+async function copyEmail() {
+  if (!emailid.value) return
+  try {
+    await copyText(emailid.value)
+    ElMessage.success('邮箱已复制')
+  } catch (e) {
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
 function openDouyin() {
   if (!douyinUrl.value) return
   const url = douyinUrl.value.trim()
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    ElMessage.warning('抖音链接格式不正确')
+    return
+  }
   window.open(url, '_blank', 'noreferrer')
 }
 
@@ -144,43 +175,97 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 字节风全局底色 极简留白 */
-.contact-container {
-  min-height: 80vh;
+.page {
+  position: relative;
+  min-height: 100vh;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: var(--app-bg);
   padding: 20px;
   box-sizing: border-box;
 }
 
-.contact-card {
-  width: 100%;
-  max-width: 420px;
-  background: var(--card-bg);
-  border-radius: 16px;
-  padding: 36px 28px;
-  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--border);
+.bg-image {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
 }
 
-.contact-title {
+.bg-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 420px;
+}
+
+.contact-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.back-link {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #fff;
+  cursor: pointer;
+  padding: 4px 8px;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.back-link:hover {
+  opacity: 0.8;
 }
 
 .contact-title h2 {
   font-size: 24px;
-  color: var(--text-1);
+  color: #fff;
   margin: 0 0 6px;
   font-weight: 600;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .contact-title p {
   font-size: 14px;
-  color: var(--text-3);
+  color: rgba(255, 255, 255, 0.8);
   margin: 0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.contact-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 16px;
+  padding: 36px 28px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
 }
 
 .contact-list {
@@ -234,6 +319,10 @@ onMounted(() => {
 
 .douyin-icon {
   background: #000000;
+}
+
+.email-icon {
+  background: #ff8200;
 }
 
 .phone-icon {

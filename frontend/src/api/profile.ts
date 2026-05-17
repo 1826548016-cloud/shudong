@@ -5,6 +5,8 @@ export type ProfilePublic = {
   bio: string
   wechat_id: string
   douyin_url: string
+  email: string
+  avatar_url: string | null
 }
 
 export type ProfileAdmin = {
@@ -14,6 +16,7 @@ export type ProfileAdmin = {
   wechat_id: string
   douyin_url: string
   phone_num: string
+  email: string
   updated_at: string
 }
 

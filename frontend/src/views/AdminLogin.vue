@@ -20,7 +20,7 @@ async function submit() {
   loading.value = true
   try {
     const { data } = await http.post<{ access: string; refresh: string }>(
-      '/api/auth/token/',
+      '/api/admin/login/',
       {
         username: form.username,
         password: form.password,
@@ -29,7 +29,7 @@ async function submit() {
     localStorage.setItem('treehole_token', data.access)
     localStorage.setItem('treehole_refresh', data.refresh)
     ElMessage.success('登录成功')
-    await router.push('/admin/editor')
+    await router.push('/')
   } catch (e) {
     ElMessage.error('登录失败，请检查账号密码')
   } finally {
@@ -40,6 +40,7 @@ async function submit() {
 
 <template>
   <section class="page">
+    <div class="bg-mask"></div>
     <div class="card">
       <div class="title">管理员登录</div>
       <el-form label-position="top">
@@ -64,17 +65,50 @@ async function submit() {
 
 <style scoped>
 .page {
-  display: grid;
-  place-items: start center;
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.bg-img {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.bg-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 
 .card {
+  position: relative;
+  z-index: 2;
   width: min(420px, 100%);
-  background: var(--card-bg);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: var(--radius);
-  padding: 18px;
-  box-shadow: var(--shadow-1);
+  padding: 28px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
 }
 
 .title {

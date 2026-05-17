@@ -1,175 +1,120 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ChatLineRound, Star } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { ChatLineRound, Star, Download, Headset } from '@element-plus/icons-vue'
 
-import { http } from '../api/http'
-
-type Post = {
+export type PostItem = {
   id: number
   content: string
   media_url: string | null
-  media_type: 'none' | 'image' | 'video'
+  media_type: 'none' | 'image' | 'video' | 'audio'
+  media_items?: { id: number; file_url: string; media_type: string }[]
   view_count: number
   like_count: number
   comment_count: number
-  created_at: string
-}
-
-type Comment = {
-  id: number
-  post: number
-  nickname: string
-  content: string
-  admin_reply: string
-  replied_at: string | null
+  is_pinned: boolean
   created_at: string
 }
 
 const props = defineProps<{
-  post: Post
+  post: PostItem
 }>()
 
-const postState = ref<Post>({ ...props.post })
-
-watch(
-  () => props.post,
-  (next) => {
-    postState.value = { ...next }
-  },
-)
+const router = useRouter()
 
 const createdAtText = computed(() => {
-  const d = new Date(postState.value.created_at)
-  if (Number.isNaN(d.getTime())) return postState.value.created_at
+  const d = new Date(props.post.created_at)
+  if (Number.isNaN(d.getTime())) return props.post.created_at
   return d.toLocaleString()
 })
 
-const drawerOpen = ref(false)
-const commentsLoading = ref(false)
-const comments = ref<Comment[]>([])
-const nickname = ref('')
-const commentText = ref('')
-
-async function openComments() {
-  drawerOpen.value = true
+function goDetail() {
+  router.push(`/posts/${props.post.id}`)
 }
 
-async function loadComments() {
-  commentsLoading.value = true
-  try {
-    await http.post(`/api/posts/${postState.value.id}/view/`)
-    const { data } = await http.get<Comment[]>(
-      `/api/posts/${postState.value.id}/comments/`,
-    )
-    comments.value = data
-    const postRes = await http.get<Post>(`/api/posts/${postState.value.id}/`)
-    postState.value.view_count = postRes.data.view_count
-    postState.value.comment_count = postRes.data.comment_count
-  } catch (e) {
-    ElMessage.error('加载评论失败')
-  } finally {
-    commentsLoading.value = false
-  }
-}
-
-watch(drawerOpen, (open) => {
-  if (open) void loadComments()
-})
-
-async function like() {
-  try {
-    const { data } = await http.post<{ like_count: number }>(
-      `/api/posts/${postState.value.id}/like/`,
-    )
-    postState.value.like_count = data.like_count
-  } catch (e) {
-    ElMessage.error('点赞失败')
-  }
-}
-
-async function submitComment() {
-  const content = commentText.value.trim()
-  if (!content) return
-
-  try {
-    await http.post(`/api/posts/${postState.value.id}/comments/`, {
-      nickname: nickname.value.trim(),
-      content,
-    })
-    commentText.value = ''
-    await loadComments()
-  } catch (e) {
-    ElMessage.error('发表评论失败')
-  }
+function getFileName(url: string): string {
+  const parts = url.split('/')
+  return parts[parts.length - 1] || '附件'
 }
 </script>
 
 <template>
-  <article class="post-card">
+  <article class="post-card" @click="goDetail">
     <div class="post-meta">
       <div class="post-time">{{ createdAtText }}</div>
-      <div class="post-stats">浏览 {{ postState.view_count }}</div>
+      <div class="post-stats">浏览 {{ post.view_count }}</div>
     </div>
+    <el-tag v-if="post.is_pinned" size="small" type="warning" class="pin-badge">置顶</el-tag>
 
-    <div v-if="postState.content" class="post-content">{{ postState.content }}</div>
+    <div v-if="post.content" class="post-content">{{ post.content }}</div>
 
-    <div v-if="postState.media_url" class="post-media">
+    <div v-if="post.media_url" class="post-media">
       <img
-        v-if="postState.media_type === 'image'"
-        :src="postState.media_url"
+        v-if="post.media_type === 'image'"
+        :src="post.media_url"
         alt=""
         loading="lazy"
+        style="aspect-ratio:16/9;object-fit:cover"
       />
       <video
-        v-else-if="postState.media_type === 'video'"
-        :src="postState.media_url"
+        v-else-if="post.media_type === 'video'"
+        :src="post.media_url"
         controls
         playsinline
+        @click.stop
       ></video>
-      <a v-else :href="postState.media_url" target="_blank" rel="noreferrer">
-        查看附件
+      <div v-else-if="post.media_type === 'audio'" class="audio-wrapper" @click.stop>
+        <div class="audio-info">
+          <el-icon :size="20"><Headset /></el-icon>
+          <span class="audio-name">音频</span>
+        </div>
+        <audio class="audio-player" :src="post.media_url" controls preload="metadata"></audio>
+      </div>
+      <a v-else :href="post.media_url" target="_blank" rel="noreferrer" class="file-link" @click.stop>
+        <el-icon :size="18"><Download /></el-icon>
+        <span>{{ getFileName(post.media_url) }}</span>
       </a>
     </div>
 
-    <div class="post-actions">
-      <el-button :icon="Star" text @click="like">点赞 {{ postState.like_count }}</el-button>
-      <el-button :icon="ChatLineRound" text @click="openComments">
-        评论 {{ postState.comment_count }}
-      </el-button>
+    <div v-if="post.media_items?.length" class="post-media-grid">
+      <div v-for="m in post.media_items" :key="m.id" class="media-cell" @click.stop>
+        <img
+          v-if="m.media_type === 'image'"
+          :src="m.file_url"
+          alt=""
+          loading="lazy"
+          style="aspect-ratio:16/9;object-fit:cover"
+        />
+        <video
+          v-else-if="m.media_type === 'video'"
+          :src="m.file_url"
+          controls
+          playsinline
+        ></video>
+        <div v-else-if="m.media_type === 'audio'" class="audio-wrapper">
+          <div class="audio-info">
+            <el-icon :size="20"><Headset /></el-icon>
+            <span class="audio-name">音频</span>
+          </div>
+          <audio class="audio-player" :src="m.file_url" controls preload="metadata"></audio>
+        </div>
+        <a v-else :href="m.file_url" target="_blank" rel="noreferrer" class="file-link">
+          <el-icon :size="18"><Download /></el-icon>
+          <span>{{ getFileName(m.file_url) }}</span>
+        </a>
+      </div>
     </div>
 
-    <el-drawer v-model="drawerOpen" title="评论" size="420px">
-      <div class="comment-box">
-        <el-input v-model="nickname" placeholder="留下一个让ta知道你的昵称！" maxlength="32" />
-        <el-input
-          v-model="commentText"
-          type="textarea"
-          :rows="3"
-          placeholder="写下你的想法…"
-          maxlength="500"
-          show-word-limit
-        />
-        <el-button type="primary" @click="submitComment">发布</el-button>
-      </div>
-
-      <el-divider />
-
-      <el-skeleton v-if="commentsLoading" :rows="6" animated />
-      <div v-else class="comment-list">
-        <div v-for="c in comments" :key="c.id" class="comment-item">
-          <div class="comment-head">
-            <div class="comment-name">{{ c.nickname || '匿名' }}</div>
-            <div class="comment-time">{{ new Date(c.created_at).toLocaleString() }}</div>
-          </div>
-          <div class="comment-content">{{ c.content }}</div>
-          <div v-if="c.admin_reply" class="admin-reply">
-            <div class="admin-reply-title">管理员回复</div>
-            <div class="admin-reply-content">{{ c.admin_reply }}</div>
-          </div>
-        </div>
-      </div>
-    </el-drawer>
+    <div class="post-actions">
+      <span class="stat-item">
+        <el-icon :size="14"><Star /></el-icon>
+        {{ post.like_count }}
+      </span>
+      <span class="stat-item">
+        <el-icon :size="14"><ChatLineRound /></el-icon>
+        {{ post.comment_count }}
+      </span>
+    </div>
   </article>
 </template>
 
@@ -178,8 +123,19 @@ async function submitComment() {
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: var(--shadow-1);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color .2s, box-shadow .25s, transform .25s;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+
+.post-card:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-2px);
+  will-change: transform;
 }
 
 .post-meta {
@@ -191,6 +147,10 @@ async function submitComment() {
   font-size: 13px;
 }
 
+.pin-badge {
+  margin-top: 8px;
+}
+
 .post-content {
   margin-top: 10px;
   white-space: pre-wrap;
@@ -200,10 +160,10 @@ async function submitComment() {
 
 .post-media {
   margin-top: 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #000;
+  background: #f5f6f8;
 }
 
 .post-media img,
@@ -213,66 +173,76 @@ async function submitComment() {
   height: auto;
 }
 
+.audio-wrapper {
+  background: #f2f3f5;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.audio-player {
+  width: 100%;
+  height: 40px;
+  border-radius: 6px;
+}
+
+.file-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--primary-light);
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+}
+
+.file-link:hover {
+  opacity: .8;
+}
+
 .post-actions {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   margin-top: 10px;
 }
 
-.comment-box {
-  display: grid;
-  gap: 10px;
-}
-
-.comment-list {
-  display: grid;
-  gap: 12px;
-}
-
-.comment-item {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  background: var(--card-bg);
-}
-
-.comment-head {
+.stat-item {
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
   color: var(--text-3);
-  font-size: 12px;
 }
 
-.comment-name {
-  color: var(--text-2);
-  font-weight: 600;
-}
-
-.comment-content {
-  margin-top: 6px;
-  white-space: pre-wrap;
-  line-height: 1.6;
-  color: var(--text-1);
-}
-
-.admin-reply {
+.post-media-grid {
+  display: grid;
+  gap: 8px;
   margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px dashed var(--border);
 }
 
-.admin-reply-title {
-  font-size: 12px;
-  color: var(--text-3);
+.media-cell img,
+.media-cell video {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  max-height: 400px;
+  object-fit: cover;
 }
 
-.admin-reply-content {
-  margin-top: 4px;
-  color: var(--text-1);
-  white-space: pre-wrap;
-  line-height: 1.6;
+.media-cell .audio-wrapper {
+  margin-top: 0;
 }
 </style>

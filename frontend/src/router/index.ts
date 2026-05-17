@@ -1,23 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import AdminEditor from '../views/AdminEditor.vue'
-import AdminLogin from '../views/AdminLogin.vue'
-import HomePage from '../views/HomePage.vue'
-import ProfileEditor from '../views/ProfileEditor.vue'
-import Connection from '../views/connection.vue'
-import AdminInbox from '../views/AdminInbox.vue'
-import PostDetail from '../views/PostDetail.vue'
-
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: HomePage },
-    { path: '/posts/:id', name: 'post-detail', component: PostDetail },
-    { path: '/admin/login', name: 'admin-login', component: AdminLogin },
-    { path: '/admin/editor', name: 'admin-editor', component: AdminEditor },
-    { path: '/admin/inbox', name: 'admin-inbox', component: AdminInbox },
-    { path: '/profile', name: 'profile', component: ProfileEditor },
-    { path: '/connection', name: 'connection', component: Connection },
+    { path: '/', name: 'home', component: () => import('../views/HomePage.vue') },
+    { path: '/about', name: 'about', component: () => import('../views/AboutMe.vue') },
+    { path: '/music', name: 'music', component: () => import('../views/MusicLibrary.vue') },
+    { path: '/messages', name: 'messages', component: () => import('../views/MessageBoard.vue') },
+    { path: '/posts/:id', name: 'post-detail', component: () => import('../views/PostDetail.vue') },
+    { path: '/admin/login', name: 'admin-login', component: () => import('../views/AdminLogin.vue') },
+    { path: '/admin/editor', name: 'admin-editor', component: () => import('../views/AdminEditor.vue') },
+    { path: '/admin/announcements', name: 'admin-announcements', component: () => import('../views/AdminAnnouncements.vue') },
+    { path: '/admin/reviews', name: 'admin-reviews', component: () => import('../views/AdminReviews.vue') },
+    { path: '/admin/inbox', name: 'admin-inbox', component: () => import('../views/AdminInbox.vue') },
+    { path: '/profile', name: 'profile', component: () => import('../views/ProfileEditor.vue') },
+    { path: '/ai-chat', name: 'ai-chat', component: () => import('../views/AIChat.vue'), meta: { hideTopbar: true } },
+    { path: '/connection', name: 'connection', component: () => import('../views/connection.vue'), meta: { hideTopbar: true } },
+    { path: '/timeline', name: 'timeline', component: () => import('../views/TimelineGallery.vue'), meta: { hideTopbar: true } },
   ],
 })
 

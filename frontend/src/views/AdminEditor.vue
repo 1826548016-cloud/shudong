@@ -1,19 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Delete, Edit } from '@element-plus/icons-vue'
-import { ElMessage, type UploadFile } from 'element-plus'
+import { Delete, Edit, Sort, Plus } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
 import { http } from '../api/http'
+
+type PostMedia = {
+  id: number
+  file_url: string
+  media_type: 'image' | 'video' | 'audio' | 'file'
+}
 
 type Post = {
   id: number
   content: string
   media_url: string | null
-  media_type: 'none' | 'image' | 'video'
+  media_type: 'none' | 'image' | 'video' | 'audio'
+  media_items: PostMedia[]
   view_count: number
   like_count: number
   comment_count: number
+  is_pinned: boolean
   created_at: string
   updated_at: string
 }
@@ -24,17 +32,33 @@ const authed = computed(() => Boolean(localStorage.getItem('treehole_token')))
 
 const createForm = reactive<{
   content: string
-  media_type: 'none' | 'image' | 'video'
-  file: File | null
+  files: File[]
 }>({
   content: '',
-  media_type: 'none',
-  file: null,
+  files: [],
 })
 
 const posts = ref<Post[]>([])
 const loading = ref(false)
 const saving = ref(false)
+
+const fileInput = ref<HTMLInputElement | null>(null)
+const editFileInput = ref<HTMLInputElement | null>(null)
+
+function handleFileSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files) return
+  for (const f of input.files) {
+    if (!createForm.files.some(ex => ex.name === f.name && ex.size === f.size)) {
+      createForm.files.push(f)
+    }
+  }
+  input.value = ''
+}
+
+function removeCreateFile(index: number) {
+  createForm.files.splice(index, 1)
+}
 
 async function loadPosts() {
   loading.value = true
@@ -48,29 +72,21 @@ async function loadPosts() {
   }
 }
 
-function onFileChange(uploadFile: UploadFile) {
-  createForm.file = (uploadFile.raw as File) ?? null
-}
-
-function onFileRemove() {
-  createForm.file = null
-}
-
 async function createPost() {
   const content = createForm.content.trim()
-  if (!content && !createForm.file) return
+  if (!content && createForm.files.length === 0) return
 
   saving.value = true
   try {
     const formData = new FormData()
     formData.append('content', content)
-    formData.append('media_type', createForm.media_type)
-    if (createForm.file) formData.append('media', createForm.file)
+    for (const f of createForm.files) {
+      formData.append('files', f)
+    }
 
     await http.post('/api/posts/', formData)
     createForm.content = ''
-    createForm.media_type = 'none'
-    createForm.file = null
+    createForm.files = []
     ElMessage.success('发布成功')
     await loadPosts()
   } catch (e) {
@@ -90,34 +106,65 @@ async function deletePost(id: number) {
   }
 }
 
+async function togglePin(p: Post) {
+  try {
+    const { data } = await http.post<{ is_pinned: boolean }>(`/api/posts/${p.id}/pin/`)
+    ElMessage.success(data.is_pinned ? '已置顶' : '已取消置顶')
+    await loadPosts()
+  } catch (e) {
+    ElMessage.error('操作失败')
+  }
+}
+
 const editOpen = ref(false)
 const editSaving = ref(false)
 const editForm = reactive<{
   id: number | null
   content: string
-  media_type: 'none' | 'image' | 'video'
-  file: File | null
+  replaceFiles: File[]
 }>({
   id: null,
   content: '',
-  media_type: 'none',
-  file: null,
+  replaceFiles: [],
 })
+const editPost = ref<Post | null>(null)
+const deleteMediaLoading = ref<number | null>(null)
 
 function openEdit(p: Post) {
+  editPost.value = p
   editForm.id = p.id
   editForm.content = p.content
-  editForm.media_type = p.media_type
-  editForm.file = null
+  editForm.replaceFiles = []
   editOpen.value = true
 }
 
-function onEditFileChange(uploadFile: UploadFile) {
-  editForm.file = (uploadFile.raw as File) ?? null
+function handleEditFileSelect(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files) return
+  for (const f of input.files) {
+    editForm.replaceFiles.push(f)
+  }
+  input.value = ''
 }
 
-function onEditFileRemove() {
-  editForm.file = null
+function removeEditFile(index: number) {
+  editForm.replaceFiles.splice(index, 1)
+}
+
+async function deletePostMedia(mediaId: number) {
+  if (!editForm.id) return
+  deleteMediaLoading.value = mediaId
+  try {
+    await http.delete(`/api/posts/${editForm.id}/media/${mediaId}/`)
+    if (editPost.value?.media_items) {
+      editPost.value.media_items = editPost.value.media_items.filter(m => m.id !== mediaId)
+    }
+    ElMessage.success('已删除文件')
+  } catch (e) {
+    ElMessage.error('删除文件失败')
+  } finally {
+    deleteMediaLoading.value = null
+  }
 }
 
 async function saveEdit() {
@@ -126,17 +173,34 @@ async function saveEdit() {
   try {
     const formData = new FormData()
     formData.append('content', editForm.content.trim())
-    formData.append('media_type', editForm.media_type)
-    if (editForm.file) formData.append('media', editForm.file)
+    if (editForm.replaceFiles.length > 0) {
+      for (const f of editForm.replaceFiles) {
+        formData.append('files', f)
+      }
+    }
     await http.patch(`/api/posts/${editForm.id}/`, formData)
     ElMessage.success('已保存')
     editOpen.value = false
+    editForm.replaceFiles = []
     await loadPosts()
   } catch (e) {
     ElMessage.error('保存失败')
   } finally {
     editSaving.value = false
   }
+}
+
+function typeIcon(mt: string): string {
+  if (mt === 'image') return '🖼️'
+  if (mt === 'video') return '🎬'
+  if (mt === 'audio') return '🎵'
+  return '📄'
+}
+
+function mediaCount(p: Post): string {
+  const n = p.media_items?.length ?? (p.media_url ? 1 : 0)
+  if (n === 0) return ''
+  return ` (${n}个附件)`
 }
 
 onMounted(async () => {
@@ -162,19 +226,30 @@ onMounted(async () => {
       />
 
       <div class="row">
-        <el-select v-model="createForm.media_type" placeholder="媒体类型">
-          <el-option label="无" value="none" />
-          <el-option label="图片" value="image" />
-          <el-option label="视频" value="video" />
-        </el-select>
-        <el-upload
-          :auto-upload="false"
-          :limit="1"
-          :on-change="onFileChange"
-          :on-remove="onFileRemove"
-        >
-          <el-button>选择文件</el-button>
-        </el-upload>
+        <div class="file-bar">
+          <input
+            ref="fileInput"
+            type="file"
+            multiple
+            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.7z,.txt"
+            style="display:none"
+            @change="handleFileSelect"
+          />
+          <el-button :icon="Plus" @click="fileInput!.click()">
+            添加文件
+          </el-button>
+          <div v-if="createForm.files.length" class="file-tags">
+            <el-tag
+              v-for="(f, i) in createForm.files"
+              :key="i"
+              closable
+              size="small"
+              @close="removeCreateFile(i)"
+            >
+              {{ typeIcon(f.type) }} {{ f.name }}
+            </el-tag>
+          </div>
+        </div>
         <el-button type="primary" :loading="saving" @click="createPost">
           发布
         </el-button>
@@ -190,10 +265,19 @@ onMounted(async () => {
     <div v-else class="post-list">
       <div v-for="p in posts" :key="p.id" class="post-row">
         <div class="post-main">
-          <div class="post-id">#{{ p.id }}</div>
+          <div class="post-id">#{{ p.id }}{{ mediaCount(p) }}</div>
           <div class="post-text">{{ p.content || '（无文字）' }}</div>
+          <div v-if="p.media_items?.length" class="post-media-icons">
+            <span v-for="m in p.media_items" :key="m.id" class="media-icon" :title="m.file_url">
+              {{ typeIcon(m.media_type) }}
+            </span>
+          </div>
+          <el-tag v-if="p.is_pinned" size="small" type="warning" class="pin-tag">置顶</el-tag>
         </div>
         <div class="post-actions">
+          <el-button :icon="Sort" text :type="p.is_pinned ? 'warning' : ''" @click="togglePin(p)">
+            {{ p.is_pinned ? '取消置顶' : '置顶' }}
+          </el-button>
           <el-button :icon="Edit" text @click="openEdit(p)">编辑</el-button>
           <el-button :icon="Delete" text type="danger" @click="deletePost(p.id)">
             删除
@@ -212,20 +296,45 @@ onMounted(async () => {
           maxlength="2000"
           show-word-limit
         />
+        <div v-if="editPost?.media_items?.length" class="dialog-media-list">
+          <div class="dialog-media-title">已有文件：</div>
+          <div v-for="m in editPost!.media_items" :key="m.id" class="dialog-media-row">
+            <span class="dialog-media-name">{{ m.file_url.split('/').pop() }}</span>
+            <el-button
+              :icon="Delete"
+              size="small"
+              type="danger"
+              circle
+              :loading="deleteMediaLoading === m.id"
+              @click="deletePostMedia(m.id)"
+            />
+          </div>
+        </div>
         <div class="row">
-          <el-select v-model="editForm.media_type" placeholder="媒体类型">
-            <el-option label="无" value="none" />
-            <el-option label="图片" value="image" />
-            <el-option label="视频" value="video" />
-          </el-select>
-          <el-upload
-            :auto-upload="false"
-            :limit="1"
-            :on-change="onEditFileChange"
-            :on-remove="onEditFileRemove"
-          >
-            <el-button>替换文件</el-button>
-          </el-upload>
+          <div class="file-bar">
+            <input
+              ref="editFileInput"
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.7z,.txt"
+              style="display:none"
+              @change="handleEditFileSelect"
+            />
+            <el-button :icon="Plus" @click="editFileInput!.click()">
+              替换/新增文件
+            </el-button>
+            <div v-if="editForm.replaceFiles.length" class="file-tags">
+              <el-tag
+                v-for="(f, i) in editForm.replaceFiles"
+                :key="i"
+                closable
+                size="small"
+                @close="removeEditFile(i)"
+              >
+                {{ typeIcon(f.type) }} {{ f.name }}
+              </el-tag>
+            </div>
+          </div>
         </div>
       </div>
       <template #footer>
@@ -257,9 +366,24 @@ onMounted(async () => {
 .row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   margin-top: 10px;
+}
+
+.file-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .list-head {
@@ -287,6 +411,12 @@ onMounted(async () => {
 
 .post-main {
   min-width: 0;
+  flex: 1;
+}
+
+.pin-tag {
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
 .post-id {
@@ -304,9 +434,21 @@ onMounted(async () => {
   -webkit-box-orient: vertical;
 }
 
+.post-media-icons {
+  margin-top: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+.media-icon {
+  font-size: 14px;
+  cursor: default;
+}
+
 .post-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .empty {
@@ -319,5 +461,36 @@ onMounted(async () => {
 .dialog-body {
   display: grid;
   gap: 10px;
+}
+
+.dialog-media-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dialog-media-title {
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.dialog-media-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dialog-media-name {
+  font-size: 13px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
